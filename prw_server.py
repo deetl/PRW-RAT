@@ -6,7 +6,11 @@ import websockets
 import json
 import shlex
 from pprint import pprint
+from concurrent.futures import ThreadPoolExecutor
 
+async def ainput(prompt: str = "") -> str:
+    with ThreadPoolExecutor(1, "AsyncInput") as executor:
+        return await asyncio.get_event_loop().run_in_executor(executor, input, prompt)
 async def handler(websocket, path):
     global stored_command
     global stored_executed
@@ -57,7 +61,8 @@ async def handler(websocket, path):
             valid_command = False
             while not valid_command:
                 # Read Command from user
-                cmdline = input('Command >>  ')
+                #cmdline = await input('Command >>  ')
+                cmdline = await ainput("What's your name? ")
                 args = shlex.split(cmdline)
                 try:
                     cmd = args[0]
