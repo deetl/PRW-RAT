@@ -23,9 +23,10 @@ direct = ["SYSINFO",
           "GET_LOGIN",
           "GET_MONITORS",
           "OPEN_URL",
-          "SCREENSHOT",
-          "WEBCAM_SNAPSHOT",
+          "SCREEN",
+          "WEBCAM",
           "KEYLOGGER",
+          "FIND",
           "EXIT"
           ]
 

