@@ -29,8 +29,8 @@ async def test():
     print("Start Test")
     try:
         print("Trying to connect...")
-        async with websockets.connect('ws://10.0.0.234:8000') as websocket:
-        # async with websockets.connect('ws://127.0.0.1:8000') as websocket:
+        #async with websockets.connect('ws://10.0.0.234:8000') as websocket:
+        async with websockets.connect('ws://127.0.0.1:8000') as websocket:
             timestamp = str(datetime.now())
             print(f"Sending hello timestamp {timestamp}")
             await websocket.send(timestamp)
@@ -86,7 +86,7 @@ async def test():
                 elif request == "GET_MONITORS":
                     # get number of used monitors
                     try:
-                        p = subprocess.check_output(["powershell.exe",
+                        p = await subprocess.check_output(["powershell.exe",
                                                      "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams"],
                                                     encoding='utf-8', timeout=5)
                         output.append(p)
