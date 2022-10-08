@@ -7,6 +7,15 @@ import json
 import shlex
 from pprint import pprint
 from concurrent.futures import ThreadPoolExecutor
+import commands
+from io import BytesIO
+import base64
+from PIL import Image, ImageDraw
+
+# Convert Base64 to Image
+def b64_2_img(data):
+    buff = BytesIO(base64.b64decode(data))
+    return Image.open(buff)
 
 async def ainput(prompt: str = "") -> str:
     with ThreadPoolExecutor(1, "AsyncInput") as executor:
@@ -15,24 +24,6 @@ async def handler(websocket, path):
     global stored_command
     global stored_executed
     global config_store
-
-    direct_commands = ["SYSINFO",
-                       "SYSTEMINFO",
-                       "GET_LOCATION",
-                       "GET_TIME",
-                       "GET_MONITORS",
-                       "GET_DRIVES",
-                       "GET_CPU",
-                       "GET_PID",
-                       "GET_ENV",
-                       "GET_LOGIN",
-                       "GET_LOGIN",
-                       "GET_NETSTAT",
-                       "GET_ROUTING",
-                       "GET_WINDOWS",
-                       "GET_TASKS",
-                       "EXIT"]
-
 
     print('#################### Start to TIMESTAMP ##############')
     try:
@@ -43,7 +34,6 @@ async def handler(websocket, path):
         return
 
     # Sending Configuration
-
     config_store_json = json.dumps(config_store)
     try:
         await websocket.send(config_store_json)
@@ -61,40 +51,41 @@ async def handler(websocket, path):
             valid_command = False
             while not valid_command:
                 # Read Command from user
-                #cmdline = await input('Command >>  ')
-                cmdline = await ainput("What's your name? ")
+                cmdline = await ainput("Command >>")
                 args = shlex.split(cmdline)
                 try:
-                    cmd = args[0]
+                    cmd = args[0].upper()
                     valid_command = True
                 except:
                     print("Enter HELP to get info on possible commands!")
-            # Some aliases
-            if cmd.upper() == "LS":
-                args[0]="DIR"
+            # Process aliases
+            if cmd in commands.aliases:
+                args[0]=commands.aliases[cmd]
 
-            if cmd.upper() == "CD":
+            # Prepare internal satements
+            if cmd == "CD":
                 args.pop(0)
                 if len(args) == 0:
                     args = ["."]
                 command = ["CD", args]
-            elif cmd.upper() == "PWD":
+            elif cmd == "PWD":
                 command = ["CD", ["."]]
-            else:
-                direct_command=False
-                for d_cmd in direct_commands:
-                    if cmd.upper() == d_cmd:
-                        command = [d_cmd, []]
-                        direct_command = True
-                if not direct_command:
-                    command = ["SHELL", args]
+            elif cmd in commands.direct:
+                args.pop(0)
+                command = [cmd, args]
+            elif cmd in commands.ps:
+                command = [cmd, []]
+            elif cmd in commands.cmd:
+                command = [cmd, []]
+            elif (not cmd in commands.ps) and (not cmd in commands.cmd):
+                print("No PWR command -> sending to cmd.exe")
+                command = ["SHELL", args]
+
             command_json = json.dumps(command)
             stored_executed=False
             stored_command=command_json
         else:
             command_json=stored_command
-
-
 
         # print('#################### Start to SEND ##############')
         try:
@@ -115,26 +106,28 @@ async def handler(websocket, path):
 
         answer = json.loads(answer_json)
         print(f">>>> Successful : {answer[0]}")
+        print(f">>>>       Type : {answer[1]}")
+        result= answer[2]
         stored_executed = True
 
         print(">>>> Response:")
-        for line in answer[1]:
-            print(line.rstrip())
 
-
-
+        if answer[1] == "IMAGE":
+            image = b64_2_img(result[0])
+            image.show()
+        else:
+            for line in result:
+                print(line.rstrip())
+        print("\n")
 
 # ############
 
 global stored_command
 global stored_executed
-
 global config_store
-
 
 stored_command=[]
 stored_executed=True
-
 # Store default config
 config_store={}
 config_store["Debugging"]=True
