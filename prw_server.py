@@ -88,6 +88,7 @@ async def handler(websocket, path):
             command_json=stored_command
 
         # print('#################### Start to SEND ##############')
+        pprint(command_json)
         try:
             data = await websocket.send(command_json)
             # print(f'Date: {data}')
@@ -95,14 +96,13 @@ async def handler(websocket, path):
             # print("Connection lost - Sending")
             return
 
+
         # print('#################### Start to RECEIVE ##############')
         try:
             answer_json = await websocket.recv()
         except:
             # print("Connection lost - Receiving")
             return
-
-
 
         answer = json.loads(answer_json)
         print(f">>>> Successful : {answer[0]}")

