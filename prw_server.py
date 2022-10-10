@@ -11,6 +11,7 @@ import commands
 from io import BytesIO
 import base64
 from PIL import Image, ImageDraw
+from vidstream import StreamingServer
 
 # Convert Base64 to Image
 def b64_2_img(data):
@@ -19,18 +20,16 @@ def b64_2_img(data):
 
 def start_video_server():
     try:
-        from vidstream import StreamingServer
         global video_server
-        video_server = StreamingServer("127.0.0.1", 8080)
+        video_server = StreamingServer("0.0.0.0", 31338)
         video_server.start_server()
     except:
         print("Module not found...")
 
 def start_screen_server():
     try:
-        from vidstream import StreamingServer
         global screen_server
-        screen_server = StreamingServer("127.0.0.1", 8081)
+        screen_server = StreamingServer("0.0.0.0", 31339)
         screen_server.start_server()
     except:
         print("Module not found...")
@@ -41,6 +40,8 @@ async def ainput(prompt: str = "") -> str:
 
 async def handler(websocket, path):
     global config_store
+    global screen_server
+    global video_server
 
     print('#################### Start to TIMESTAMP ##############')
     try:
@@ -94,10 +95,10 @@ async def handler(websocket, path):
                 start_video_server()
             elif args[0] == "STOP":
                 command = [cmd, args]
-                try:
-                    video_server.stop_server()
-                except:
-                    pass
+                #try:
+                video_server.stop_server()
+                #except:
+                #    pass
             elif args[0] == "SNAP":
                 command = [cmd, args]
             elif args[0] == "STATUS":
@@ -185,7 +186,7 @@ config_store["Logging"]=True
 config_store["Shell_Timeout"]=5
 
 print("Create Server Objekt")
-start_server = websockets.serve(handler, "0.0.0.0", 8000)
+start_server = websockets.serve(handler, "0.0.0.0", 31337)
 
 print("Start Server")
 asyncio.get_event_loop().run_until_complete(start_server)

