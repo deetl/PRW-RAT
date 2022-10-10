@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-#Playground
+# Playground
 import asyncio
 import websockets
 import json
@@ -12,11 +12,15 @@ from io import BytesIO
 import base64
 from PIL import Image, ImageDraw
 from vidstream import StreamingServer
+import multiprocessing
+from syslog import syslog
+
 
 # Convert Base64 to Image
 def b64_2_img(data):
     buff = BytesIO(base64.b64decode(data))
     return Image.open(buff)
+
 
 def start_video_server():
     try:
@@ -26,13 +30,15 @@ def start_video_server():
     except:
         print("Module not found...")
 
+
 def start_screen_server():
     try:
-        global screen_server
+        # global screen_server
         screen_server = StreamingServer("0.0.0.0", 31339)
         screen_server.start_server()
     except:
-        print("Module not found...")
+        syslog("ERROR starting screen...")
+
 
 async def ainput(prompt: str = "") -> str:
     with ThreadPoolExecutor(1, "AsyncInput") as executor:
@@ -42,6 +48,12 @@ async def handler(websocket, path):
     global config_store
     global screen_server
     global video_server
+    global screen_proc
+
+    try:
+        screen_proc.kill()
+    except:
+        print("Can't kill screensharing process!")
 
     print('#################### Start to TIMESTAMP ##############')
     try:
@@ -72,8 +84,7 @@ async def handler(websocket, path):
 
         # Process aliases
         if cmd in commands.aliases:
-            args[0]=commands.aliases[cmd]
-
+            args[0] = commands.aliases[cmd]
 
         # Prepare internal satements
 
@@ -89,15 +100,15 @@ async def handler(websocket, path):
             if len(args) == 0:
                 args = ["STATUS"]
 
-            args[0]=args[0].upper()
+            args[0] = args[0].upper()
             if args[0] == "STREAM":
                 command = [cmd, args]
                 start_video_server()
             elif args[0] == "STOP":
                 command = [cmd, args]
-                #try:
+                # try:
                 video_server.stop_server()
-                #except:
+                # except:
                 #    pass
             elif args[0] == "SNAP":
                 command = [cmd, args]
@@ -110,14 +121,18 @@ async def handler(websocket, path):
             args.pop(0)
             if len(args) == 0:
                 args = ["STATUS"]
-            args[0]=args[0].upper()
+            args[0] = args[0].upper()
             if args[0] == "STREAM":
                 command = [cmd, args]
-                start_screen_server()
+                screen_proc = multiprocessing.Process(target=start_screen_server)
+                screen_proc.start()
+                # start_screen_server()
             elif args[0] == "STOP":
                 command = [cmd, args]
                 try:
-                    screen_server.stop_server()
+                    # proc.terminate()
+                    screen_proc.kill()
+                # screen_server.stop_server()
                 except:
                     pass
             elif args[0] == "SNAP":
@@ -141,7 +156,7 @@ async def handler(websocket, path):
         command_json = json.dumps(command)
 
         # print('#################### Start to SEND ##############')
-        #pprint(command_json)
+        # pprint(command_json)
         try:
             data = await websocket.send(command_json)
             # print(f'Date: {data}')
@@ -159,7 +174,7 @@ async def handler(websocket, path):
         answer = json.loads(answer_json)
         print(f">>>> Successful : {answer[0]}")
         print(f">>>>       Type : {answer[1]}")
-        result= answer[2]
+        result = answer[2]
         stored_executed = True
 
         print(">>>> Response:")
@@ -178,12 +193,11 @@ global stored_executed
 global config_store
 global video_server
 
-
 # Store default config
-config_store={}
-config_store["Debugging"]=True
-config_store["Logging"]=True
-config_store["Shell_Timeout"]=5
+config_store = {}
+config_store["Debugging"] = True
+config_store["Logging"] = True
+config_store["Shell_Timeout"] = 5
 
 print("Create Server Objekt")
 start_server = websockets.serve(handler, "0.0.0.0", 31337)
